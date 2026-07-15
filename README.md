@@ -20,7 +20,27 @@ this hasn't surfaced upstream.
 - SpacetimeDB CLI / local standalone server **2.6.1**
   (commit 052c83fe984a4c4eb7bb4f9afa5c6b1903891d87)
 - Windows 11 Pro
-- Client: raw-WebSocket Python (protocol-level, one file, only dep `websockets`)
+- Client: raw-WebSocket Rust (`tokio-tungstenite` — the same transport the
+  official Rust SDK uses internally)
+
+## Why a raw client (the official Rust SDK cannot reproduce this)
+
+The reproducing client must negotiate the `v3` subprotocol, and the official
+`spacetimedb-sdk` 2.6.1 **cannot** — it is compile-time-locked to v2:
+
+- The subprotocol header is a hardcoded `const { ws::v2::BIN_PROTOCOL }`
+  (`websocket.rs`), with no config option, feature flag, or env override.
+- The entire send/receive pipeline is typed against concrete `ws::v2::*` types
+  (`ClientMessage`, `ServerMessage`, the `SpacetimeModule` trait bounds); it is
+  not generic over protocol version and never references `ws::v3`.
+
+So even forcing the v3 header would make it deserialize v3 wire bytes as v2
+structs and error, not "run on v3". Reproducing v3 requires a raw client — hence
+this one. Passing `v2` uses the exact protocol the official SDK speaks, so the
+**v2 run is a built-in control**: identical client, identical workload, only the
+subprotocol string differs. (This is also why the bug went unnoticed upstream:
+Clockwork's own SDKs are v2-only. The community Godot SDK that hit it ships a v3
+subprotocol header on a v2-typed parser.)
 
 ## Contents
 
@@ -29,10 +49,11 @@ this hasn't surfaced upstream.
     is permanently saturated. Toggle at runtime:
     `spacetime call resultdrop set_spin false`
   - `ping(seq: u32, payload: Vec<u8>)` — trivial single-row upsert
-- `ping_burst.py` — sends N `CallReducer(ping)` frames (17 KB payload each) at
-  precise 15 ms intervals, counts distinct `ReducerResult` request_ids received.
-  The **only** difference between the passing and failing run is the negotiated
-  subprotocol string, passed as the first CLI arg.
+- `client/` — raw-WebSocket Rust client (`tokio-tungstenite`). Sends N
+  `CallReducer(ping)` frames (17 KB payload each) at precise `gap_ms` intervals
+  and counts distinct `ReducerResult` request_ids received. The **only**
+  difference between the passing and failing run is the negotiated subprotocol
+  string, passed as the first CLI arg.
 
 ## Steps
 
@@ -41,9 +62,9 @@ spacetime start                                   # local server on :3000
 spacetime login                                   # client uses the CLI token
 spacetime publish --server local -p . resultdrop
 
-pip install websockets
-python ping_burst.py v2 15 80 17    # protocol gap_ms n_calls payload_kb
-python ping_burst.py v3 15 80 17
+cd client
+cargo run --release -- v2 15 80 17    # protocol gap_ms n_calls payload_kb
+cargo run --release -- v3 15 80 17
 ```
 
 ## Results
