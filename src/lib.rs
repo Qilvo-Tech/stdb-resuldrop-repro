@@ -1,7 +1,7 @@
 //! Minimal repro module for: SpacetimeDB silently drops ReducerResult
 //! messages to a WS caller when reducer calls arrive at high rate while a
 //! scheduled reducer saturates the host (scheduled every 50ms, each run
-//! takes ~75ms wall).
+//! takes ~100ms wall).
 
 use spacetimedb::{reducer, table, ReducerContext, ScheduleAt, Table};
 
@@ -48,7 +48,7 @@ pub fn set_spin(ctx: &ReducerContext, enabled: bool) {
     log::info!("spin enabled = {}", enabled);
 }
 
-/// Burns ~75ms of deterministic CPU via a xorshift64 spin loop (when enabled).
+/// Burns ~100ms of deterministic CPU via a xorshift64 spin loop (when enabled).
 /// The final value is logged so the loop can't be optimized away.
 #[reducer]
 pub fn tick(ctx: &ReducerContext, _timer: TickTimer) {
