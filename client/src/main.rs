@@ -41,25 +41,15 @@ fn get_token() -> String {
         .to_string()
 }
 
-/// 16 random bytes as hex, from a splitmix64 seeded by the wall clock (avoids a
-/// `rand` dependency — uniqueness per connect is all the server needs).
+/// 16-byte connection id as hex. `as_nanos()` is a u128 (16 bytes → 32 hex
+/// chars), unique enough per run; the server only needs it distinct per connect,
+/// so this avoids a `rand` dependency.
 fn connection_id_hex() -> String {
-    let mut s = SystemTime::now()
+    let nanos = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
-        .as_nanos() as u64;
-    let mut next = || {
-        s = s.wrapping_add(0x9E3779B97F4A7C15);
-        let mut z = s;
-        z = (z ^ (z >> 30)).wrapping_mul(0xBF58476D1CE4E5B9);
-        z = (z ^ (z >> 27)).wrapping_mul(0x94D049BB133111EB);
-        z ^ (z >> 31)
-    };
-    let mut hex = String::with_capacity(32);
-    for _ in 0..2 {
-        hex.push_str(&format!("{:016x}", next()));
-    }
-    hex
+        .as_nanos();
+    format!("{nanos:032x}")
 }
 
 /// ClientMessage::CallReducer (tag 0x03): request_id u32le, flags u8,
